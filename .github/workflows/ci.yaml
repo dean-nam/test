@@ -1,0 +1,66 @@
+name: Test Workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-test-data:
+    runs-on: ubuntu-latest
+    outputs:
+      test-data: ${{ steps.set-output.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set test data
+        id: set-output
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const testData = [
+              { id: '1', name: 'test1' },
+              { id: '2', name: 'test2' },
+              { id: '3', name: 'test3' }
+            ];
+            return testData;
+
+  test-simple:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        key: [1, 2, 3]
+      fail-fast: false
+    steps:
+      - name: Test simple value
+        env:
+          MAT_KEY: ${{ matrix.key }}
+        run: |
+          echo "--- Raw value: ${MAT_KEY}"
+          echo "--- Quoted: '${MAT_KEY}'"
+          echo "--- Length: ${#MAT_KEY}"
+          echo "--- As number test:"
+          node -e "const val = process.env.MAT_KEY; console.log('Type:', typeof val, '| Value:', val, '| As number:', Number(val));"
+
+  test-object:
+    needs: get-test-data
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        item: ${{ fromJson(needs.get-test-data.outputs.test-data) }}
+      fail-fast: false
+    steps:
+      - name: Test object value (without toJson)
+        env:
+          MAT_ITEM: ${{ matrix.item }}
+        run: |
+          echo "--- Value: ${MAT_ITEM}"
+          echo "--- Value (quoted): '${MAT_ITEM}'"
+          echo "--- Trying JSON.parse:"
+          node -e "try { console.log('Success:', JSON.parse(process.env.MAT_ITEM)); } catch(e) { console.log('Error:', e.message); }" || true
+      
+      - name: Test object value (with toJson)
+        env:
+          MAT_ITEM_JSON: ${{ toJson(matrix.item) }}
+        run: |
+          echo "--- Value with toJson: ${MAT_ITEM_JSON}"
+          echo "--- Trying JSON.parse:"
+          node -e "console.log('Success:', JSON.parse(process.env.MAT_ITEM_JSON));"
+  
